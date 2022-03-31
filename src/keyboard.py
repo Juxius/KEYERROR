@@ -2,340 +2,141 @@ import bpy
 import os
 import json
 import time
+import numpy
 from mathutils import Matrix, Vector
-from math import cos, sin ,radians
+from math import cos, sin ,radians ,pi
+import presets
+from . import load
 
- 
+
 def addKeyboard(file):
     scene = bpy.context.scene
     data = bpy.data
     datao = data.objects
     datam = data.materials
     
-    mytool = scene.my_tool
-    legendspg = scene.legends_pg
-    switchespg = scene.switches_pg
-    keycapspg = scene.keycaps_pg
-    pcbplatepg = scene.pcbplate_pg
+    keyb = scene.keyboardpg
+    filepath = os.path.join(os.path.dirname(__file__), "caps.blend")
     
     #collection names
-    capcollection = mytool.input_name + " Caps"
-    switchcollection = mytool.input_name + " Switches"
-    legendcollection = mytool.input_name + " Legends"
-    casecollection = mytool.input_name + " Case"
+    collections = [
+    keyb.input_name + " Caps" , keyb.input_name + " Legends" , keyb.input_name + " Switches" , keyb.input_name + " Case"
+    ]
     
     #define vars 
     addedKEYCAPS = []
     addedCARACTERS = []
     addedSWITCHES = []
-    
-    #save previous name
-    global KeyError_NAME
-    try:
-        previousname = KeyError_NAME
-    except:
-        pass
-    KeyError_NAME = mytool.input_name
+    enabled = []
     
     #prepare scene
-    bpy.context.space_data.overlay.show_relationship_lines = False
-    
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    try:
-        materials = ("sUpper","sBase","sStem","sPins")
-        for mat in materials:
-            matr = datam[previousname + " " + mat + ".001"]
-            datam.remove( matr )
-    except:
-        pass
-    
-    try:
-        keycapmatr = datam[str(previousname) + "_Cap_Material"]
-        datam.remove( keycapmatr )
-    except:
-        pass
+    bpy.context.space_data.overlay.show_relationship_lines = False#
 
-    #open 
     with open(file, 'r') as f:
         textinput = json.load(f) 
-    
-    #textinput = [[{'p': 'R2', 'a': 6}, 'Esc', {'a': 4, 'f': 6}, 'Q', 'O', 'P', {'a': 6, 'f': 3}, 'Esc']]
 
     #add main collection
-    if not bpy.context.scene.collection.children.get( mytool.input_name ):    
-        main_coll = data.collections.new( mytool.input_name )
-        bpy.context.scene.collection.children.link(main_coll)
+    if not bpy.context.scene.collection.children.get( keyb.input_name ):    
+        maincoll = data.collections.new( keyb.input_name )
+        bpy.context.scene.collection.children.link(maincoll)
     else:
-        main_coll = bpy.context.scene.collection.children.get(mytool.input_name)
+        maincoll = bpy.context.scene.collection.children.get(keyb.input_name)
     
+    if keyb.booleancap == True: enabled.append(collections[0])
+    if keyb.booleanlegends == True: enabled.append(collections[1])
+    if keyb.booleanswitch == True: enabled.append(collections[2])
+    if keyb.booleanplate == True or keyb.booleancase == True : enabled.append(collections[3])
     
-    #add sub collections
-    if main_coll and not main_coll.children.get( capcollection ) and keycapspg.boolean == True:
-        my_sub_coll = data.collections.new( capcollection )
-        main_coll.children.link(my_sub_coll)
-    elif main_coll and main_coll.children.get( capcollection ):
-        collection = data.collections[ capcollection ]
-        delmeshes = set()
-        
-        for obj in [o for o in collection.objects if o.type == 'MESH']:
-            delmeshes.add( obj.data )
-            datao.remove( obj )
-            
-        for mesh in [m for m in delmeshes if m.users == 0]:
-            data.meshes.remove( mesh )
-        if keycapspg.boolean == False:
-            delcol = data.collections[ capcollection ]
-            data.collections.remove(delcol)
+    for coll in collections:
+        if data.collections.get(coll):
+            subcoll = data.collections[coll]
+            delmeshes = set()
+            delfont = set()
+            for mesh in [o for o in subcoll.objects if o.type == 'MESH']:
+                delmeshes.add( mesh.data )
+                datao.remove( mesh )
+            for font in [o for o in subcoll.objects if o.type == 'FONT']:
+                delfont.add( font.data )
+                datao.remove( font )
+
+            for mesh in [m for m in delmeshes if m.users == 0]:
+                data.meshes.remove( mesh )
+            for font in [m for m in delfont if m.users == 0]:
+                data.curves.remove( font )
+                
+            data.collections.remove(subcoll)
+       
+    #create main collection
+    if not bpy.context.scene.collection.children.get( keyb.input_name ):    
+        maincoll = data.collections.new( keyb.input_name )
+        bpy.context.scene.collection.children.link(maincoll)
+    else:
+        maincoll = data.collections[ keyb.input_name ]
+
+    for coll in enabled:
+        if maincoll and not data.collections.get( coll ):
+            subcoll = data.collections.new( coll )
+            maincoll.children.link(subcoll)
+        if coll == keyb.input_name + " Caps" and len(enabled) > 1 and enabled[1] == keyb.input_name + " Legends":
+            subsubcoll = data.collections.new( enabled[1] )
+            subcoll.children.link(subsubcoll)
+            enabled.pop(1) 
     
-    #switch collection
-    if main_coll and not main_coll.children.get( switchcollection ) and switchespg.boolean == True:
-        my_sub_coll = data.collections.new( switchcollection )
-        main_coll.children.link(my_sub_coll)
-    elif main_coll and main_coll.children.get( switchcollection ):
-        collection = data.collections[ switchcollection ]
-        delmeshes = set()
-        
-        for obj in [o for o in collection.objects if o.type == 'MESH']:
-            delmeshes.add( obj.data )
-            datao.remove( obj )
-            
-        for mesh in [m for m in delmeshes if m.users == 0]:
-            data.meshes.remove( mesh )
-        if switchespg.boolean == False:
-            delcol = data.collections[ switchcollection ]
-            data.collections.remove(delcol)        
-    
-    #legend collection
-    if main_coll and not main_coll.children.get( legendcollection ) and legendspg.boolean == True:
-        my_sub_coll1 = data.collections.new( legendcollection )
-        main_coll.children.link(my_sub_coll1)
-    elif main_coll and main_coll.children.get( legendcollection ):
-        collection = data.collections[ legendcollection ]
-        curvesleg = set()
-        
-        for obj in [o for o in collection.objects if o.type == 'FONT']:
-            curvesleg.add( obj.data )
-            datao.remove( obj )
-            
-        for curve in [m for m in curvesleg if m.users == 0]:
-            data.curves.remove( curve )
-        if legendspg.boolean == False:
-            delcol = data.collections[ legendcollection ]
-            data.collections.remove(delcol)   
-    
-    #case collection
-    if main_coll and not main_coll.children.get( casecollection ) and pcbplatepg.platebool == True or pcbplatepg.casebool == True:
-        my_sub_coll1 = data.collections.new( casecollection )
-        main_coll.children.link(my_sub_coll1)
-    elif main_coll and main_coll.children.get( casecollection ):
-        collection = data.collections[ casecollection ]
-        delmeshes = set()
-        
-        for obj in [o for o in collection.objects if o.type == 'MESH']:
-            delmeshes.add( obj.data )
-            datao.remove( obj )
-            
-        for mesh in [m for m in delmeshes if m.users == 0]:    
-            data.meshes.remove( mesh )
-        if pcbplatepg.platebool == False:
-            delcol = data.collections[ casecollection ]
-            data.collections.remove(delcol)   
-    
-    #import node groups
-    filepath = os.path.join(os.path.dirname(__file__), "caps.blend")
-    
-    #import plate nodes
-    if not bpy.data.node_groups.get(mytool.input_name + "_Plate_Nodes") and pcbplatepg.platebool == True:
-        with data.libraries.load(filepath, link=False) as (data_from, data_to):
-            data_to.node_groups = ["PLATE_NODES"]
-        bpy.data.node_groups["PLATE_NODES"].name = mytool.input_name + "_Plate_Nodes"
-    
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if not bpy.data.materials.get(mytool.input_name + " Plate") and pcbplatepg.platebool == True:
-        with data.libraries.load(filepath, link=False) as (data_from, data_to):
-            data_to.materials = ["PlateMat"]
-        bpy.data.materials["PlateMat"].name = mytool.input_name + " Plate"
-    
-    #import case nodes
-    if not bpy.data.node_groups.get(mytool.input_name + "_Case_Nodes") and pcbplatepg.casebool == True:
-        with data.libraries.load(filepath, link=False) as (data_from, data_to):
-            data_to.node_groups = ["CASE_NODES"]
-        bpy.data.node_groups["CASE_NODES"].name = mytool.input_name + "_Case_Nodes"    
-    
-    #setup
-    vertices = []
-    yoffset = 0
+
+    keyboard = load.load(file)
     platewidth = 0
     plateheight = 0
-    
-    #defaults (need to be defined for every change)
-    legpos = 4
-    profilerow = "R1"
-    capcolor = "#cccccc" 
-    legendcolor = "#000000" 
-    textsize = 3
-    
-    rotation = 0
-    rotoriginx = 0 
-    rotoriginy = 0
-    
-    for row in textinput:
-        #setup
-        index = 0
-        xoffset = 0
-        textsize2 = 0
+    vertices = []
+    for key in keyboard:
+        if keyb.booleancap == True:
+            addedKEYCAPS.append( linkkeycaps ( key ))
         
-        for item in row:
-            #defaults (need to be defined for every different cap)
-            width = 1
-            width2 = 0
-            height = 1 
-            stepped = "false"
-            item2 =  ""
+        if keyb.booleanlegends == True and keyb.legendtype == "objleg":
+            addedCARACTERS + addLegend( key )
             
-            if isinstance(item, dict):
-                try: 
-                    width = item["w"]
-                except:
-                    pass
-                    
-                try:    
-                    height = item["h"]
-                except:
-                    pass
-                    
-                try:
-                    xoffset += item["x"]
-                except:
-                    pass
-                    
-                try:
-                    legpos = item["a"]
-                except:
-                    pass
-                    
-                try:
-                    yoffset += item["y"]   
-                except:
-                    pass
-                    
-                try:
-                    stepped = item["l"] 
-                    stepped = "true"
-                except:
-                    pass
+        if keyb.booleanswitch == True:
+            #addedSWITCHES + linkswitch( key )
+            addedSWITCHES.append(linkswitch( key ))
 
-                try:
-                    width2 = item["w2"]
-                except:
-                    pass    
-                
-                try:
-                    textsize = item["f"] 
-                except:
-                    pass 
-                    
-                try:
-                    textsize2 = item["f2"] 
-                except:
-                    pass  
-                    
-                try:
-                    profilerow = item["p"] 
-                except:
-                    pass  
-                    
-                try:
-                    capcolor = item["c"]
-                except:
-                    pass
- 
-                try:
-                    legendcolor = item["t"]
-                except:
-                    pass
-                    
-                try:
-                    rotation = item["r"]
-                except:
-                    pass
-                
-                try:
-                    rotoriginx = item["rx"]
-                except:
-                    pass
-                
-                try:
-                    rotoriginy = item["ry"]
-                except:
-                    pass
-                 
- 
-                item = row[index+1]
-                row.pop(index+1)
-                
-            if keycapspg.boolean == True:
-                linkkeycaps( profilerow, width, height, item, xoffset, yoffset, capcolor, width2, rotation, rotoriginx, rotoriginy)
-                addedmesh = data.collections[ capcollection ].objects[str(xoffset) + " " + str(yoffset)].data
-                addedKEYCAPS.append(addedmesh)    
+        if keyb.booleanplate == True:
+            vertices += [((key.x + (key.w - 1) * 0.5 ) * 0.019 + 0.009, -(key.y + (key.h - 1) * 0.5 ) * 0.019  , -0.006)]
             
-            if switchespg.boolean == True:
-                linkswitch(xoffset,yoffset,width,height)
-                addedswitch = data.collections[ switchcollection ].objects["S" + str(xoffset) + " " + str(yoffset)].data
-                addedSWITCHES.append(addedswitch)
+            if key.w >= 2 and key.w <= 6: 
+                vertices += [(((key.x + (key.w - 1) * 0.5 ) * 0.019 + 0.009) - 0.01195, -key.y * 0.019  , -0.012)]
+                vertices += [(((key.x + (key.w - 1) * 0.5 ) * 0.019 + 0.009) + 0.01195, -key.y * 0.019  , -0.012)]
+            elif key.w > 6:
+                vertices += [(((key.x + (key.w - 1) * 0.5 ) * 0.019 + 0.009) - 0.0498, -key.y * 0.019  , -0.012)]
+                vertices += [(((key.x + (key.w - 1) * 0.5 ) * 0.019 + 0.009) + 0.0498, -key.y * 0.019  , -0.012)]
+            if key.h >= 2:
+                vertices += [(((key.x + (key.w - 1) * 0.5 ) * 0.019 + 0.009), -(key.y + (key.h - 1) * 0.5 ) * 0.019 - 0.01195  , 0)]
+                vertices += [(((key.x + (key.w - 1) * 0.5 ) * 0.019 + 0.009), -(key.y + (key.h - 1) * 0.5 ) * 0.019 + 0.01195  , 0)]
+        
+        
+
+        if platewidth < key.x + key.w:
+            platewidth = key.x + key.w
+        if plateheight < key.y + key.h:
+            plateheight = key.y + key.h
+  
+    scale = tuple([keyb.input_scale] * 3)
+    if keyb.booleanplate == True:
+        
+        #import plate geometry nodes
+        if not bpy.data.node_groups.get(keyb.input_name + "_Plate_Nodes"):
+            with data.libraries.load(filepath, link=False) as (data_from, data_to):
+                data_to.node_groups = ["PLATE_NODES"]
+            bpy.data.node_groups["PLATE_NODES"].name = keyb.input_name + "_Plate_Nodes"
+        
+        #material
+        if not datam.get(keyb.input_name + " Plate"):
+            platemat = addMaterial(keyb.input_name + " Plate", keyb.platecolor , keyb.platerought , keyb.platemetallic , keyb.platetrans , 0.2 , 0.045)
+        else:
+            platemat = bpy.data.materials[keyb.input_name + " Plate"]
+            platemat.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = keyb.platerought
+            platemat.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = keyb.platemetallic
+            platemat.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = keyb.platecolor
+            platemat.node_tree.nodes["Principled BSDF"].inputs["Transmission"].default_value = keyb.platetrans
             
-            if legendspg.boolean == True and legendspg.typeselector == "objleg":
-                xcount = item.count("\n")
-                if xcount > 2 and not isinstance(item, dict):
-                        
-                    stringindex = 0
-                    lists = []
-                    for x in range (0,len(item)):
-                        
-                        if stringindex == item.find("\n", x):
-                            continue
-                        stringindex = item.find("\n", x)
-                        lists.append(stringindex)
-                        
-                    if len(lists) > 2 and lists[1] != "":
-                        item2 = item[lists[1] + 1:]
-                        item = item[:lists[1]]
-                        addLegend( item2, width, width2, height, xoffset+0.3, yoffset, legpos, textsize, legendcolor)
-                        addedleg = data.collections[ legendcollection ].objects[mytool.input_name + "_L_" + str(xoffset+0.3) + "_" + str(yoffset) + "_" +  str(legpos)].data
-                        addedCARACTERS.append(addedleg)
-                        
-                if textsize2 != 0:
-                    stringindex1 = item.find("\n")
-                    if stringindex1 != -1:
-                        item1 = item[:stringindex1]
-                        item2 = item[stringindex1+1:]
-                        item = item1
-                    if item2 != "":
-                        addLegend( item2, width, width2, height, xoffset, yoffset, 2, textsize2, legendcolor)
-                        addedleg = data.collections[ legendcollection ].objects[mytool.input_name + "_L_" + str(xoffset) + "_" + str(yoffset) + "_" +  str(2)].data
-                        addedCARACTERS.append(addedleg)
-                if item != "":
-                    addLegend( item, width, width2, height, xoffset, yoffset, legpos, textsize, legendcolor)
-                    addedleg = data.collections[ legendcollection ].objects[mytool.input_name + "_L_" + str(xoffset) + "_" + str(yoffset) + "_" +  str(legpos)].data
-                    addedCARACTERS.append(addedleg)
-            
-            point = [((xoffset + (width - 1) * 0.5 ) * 0.019 + 0.009, -yoffset * 0.019  , 0)]
-            vertices += point
-            
-            xoffset += width 
-            
-            if platewidth < xoffset:
-                platewidth = xoffset
-            
-            
-            index += 1
-        yoffset += 1
-        if plateheight < yoffset:
-                plateheight = yoffset
-                
-    
-    
-    if pcbplatepg.platebool == True:
         faces = []
         edges = []
         
@@ -343,32 +144,50 @@ def addKeyboard(file):
         pointmesh.from_pydata(vertices, edges, faces)
         pointmesh.update()
         # make object from mesh
-        new_object = bpy.data.objects.new(mytool.input_name + " Plate", pointmesh)
+        new_object = bpy.data.objects.new(keyb.input_name + " Plate", pointmesh)
         # make collection
-
-        nodegroup = bpy.data.node_groups[mytool.input_name + "_Plate_Nodes"]
+        
+        nodegroup = bpy.data.node_groups[keyb.input_name + "_Plate_Nodes"]
         geonodes = new_object.modifiers.new("Plate", "NODES")
         
         delnode = new_object.modifiers["Plate"].node_group
         bpy.data.node_groups.remove(delnode)
         geonodes.node_group = nodegroup
-        nodegroup.nodes["INPUT_X"].outputs[0].default_value = platewidth
-        nodegroup.nodes["INPUT_Y"].outputs[0].default_value = plateheight
-        nodegroup.nodes["Transform"].inputs["Translation"].default_value = (platewidth * 0.0095 - 0.0005, plateheight* -0.0095 + 0.0095,-0.0061)
-        platemat = bpy.data.materials[mytool.input_name + " Plate"]
+        nodegroup.nodes["INPUT_X"].outputs[0].default_value = platewidth 
+        nodegroup.nodes["INPUT_Y"].outputs[0].default_value = plateheight 
+        nodegroup.nodes["Transform"].inputs["Translation"].default_value = (0,0,-0.0061)
+        bevel = new_object.modifiers.new("Bevel", "BEVEL")
+        bevel.use_clamp_overlap = False
+        bevel.width = 0.0001
         
         nodegroup.nodes["Set Material"].inputs[2].default_value = platemat
-        platemat.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = pcbplatepg.platerought
-        platemat.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = pcbplatepg.platemetallic
-        platemat.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = pcbplatepg.platecolor
-        platemat.node_tree.nodes["Principled BSDF"].inputs["Transmission"].default_value = pcbplatepg.platetrans
         
         new_object.data.materials.append(platemat)
+        origin = Vector((platewidth * 0.5 * 0.019 - 0.0005, -(plateheight - 1) * 0.5 * 0.019, 0))
+        new_object.data.transform(Matrix.Translation(-origin))
         
-        collection = bpy.data.collections[ casecollection ]
+        collection = bpy.data.collections[ collections[3] ]
         collection.objects.link(new_object)
+        if keyb.parenttocap == False and keyb.parenttoswitch == False and keyb.parenttoplate == False and keyb.parenttocase == False:
+            new_object.scale = scale
+            new_object.rotation_euler = (keyb.input_rotation, 0, 0)           
+    if keyb.booleancase == True:
         
-    if pcbplatepg.casebool == True:
+        #import case geometry nodes
+        if not bpy.data.node_groups.get(keyb.input_name + "_Case_Nodes") and keyb.booleancase == True:
+            with data.libraries.load(filepath, link=False) as (data_from, data_to):
+                data_to.node_groups = ["CASE_NODES"]
+            bpy.data.node_groups["CASE_NODES"].name = keyb.input_name + "_Case_Nodes"    
+        
+        #material 
+        if not datam.get(keyb.input_name + " Case"):
+            casemat = addMaterial(keyb.input_name + " Case" , keyb.casecolor , keyb.caserought , keyb.casemetallic , 0 , 0 , 0.045)
+        else:
+            casemat = bpy.data.materials[keyb.input_name + " Case"]
+            casemat.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = keyb.caserought
+            casemat.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = keyb.casemetallic
+            casemat.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = keyb.casecolor
+        
         faces = []
         edges = []
         vertices = [(0,0,0)]
@@ -377,10 +196,10 @@ def addKeyboard(file):
         pointmesh.from_pydata(vertices, edges, faces)
         pointmesh.update()
         # make object from mesh
-        new_object = bpy.data.objects.new(mytool.input_name + " Case", pointmesh)
+        new_object = bpy.data.objects.new(keyb.input_name + " Case", pointmesh)
         # make collection
 
-        nodegroup = bpy.data.node_groups[mytool.input_name + "_Case_Nodes"]
+        nodegroup = bpy.data.node_groups[keyb.input_name + "_Case_Nodes"]
         geonodes = new_object.modifiers.new("Case", "NODES")
         
         delnode = new_object.modifiers["Case"].node_group
@@ -389,43 +208,39 @@ def addKeyboard(file):
         geonodes.node_group = nodegroup
         nodegroup.nodes["INPUT_X"].outputs[0].default_value = platewidth
         nodegroup.nodes["INPUT_Y"].outputs[0].default_value = plateheight
-        #nodegroup.nodes["Transform"].inputs["Translation"].default_value = (platewidth * 0.0095 - 0.0005, plateheight* -0.0095 + 0.0095,-0.0061)
-        #platemat = bpy.data.materials[mytool.input_name + " Plate"]
+        nodegroup.nodes["INPUT_ANGLE"].outputs[0].default_value = keyb.input_rotation
+        nodegroup.nodes["Set Material"].inputs[2].default_value = casemat
+       
+        new_object.data.materials.append(casemat)
         
-        #nodegroup.nodes["Set Material"].inputs[2].default_value = platemat
-        #platemat.node_tree.nodes["Principled BSDF"].inputs["Roughness"].default_value = pcbplatepg.platerought
-        #platemat.node_tree.nodes["Principled BSDF"].inputs["Metallic"].default_value = pcbplatepg.platemetallic
-        #platemat.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = pcbplatepg.platecolor
-        
-        #new_object.data.materials.append(platemat)
-        
-        collection = bpy.data.collections[mytool.input_name + " Plate + PCB"]
+        collection = bpy.data.collections[collections[3]]
         collection.objects.link(new_object)
+
+        if True in {keyb.parenttocap, keyb.parenttoswitch, keyb.parenttoplate, keyb.parenttocase}: pass
+        else:    
+            new_object.scale = scale
+            new_object.rotation_euler = (keyb.input_rotation, 0, 0)
+ 
+    origin = Vector((platewidth * 0.5 * 0.019 - 0.0005, -(plateheight - 1) * 0.5 * 0.019, 0))
     
-    #if legendspg.boolean == True and legendspg.typeselector == "uvleg":
-    #    genUV()
     
-    #middle of object
-    origin = Vector((platewidth * 0.5 * 0.019 - 0.0005, -plateheight * 0.5 * 0.019, 0))
-    
-    scale = (mytool.input_scale, mytool.input_scale, mytool.input_scale )
     #keycap join ----------------------------------------------------------------------------------------
-    if keycapspg.boolean == True:
+    if keyb.booleancap == True:
+        
         #adds all objs to list 
         meshescaps = []
-        collection = data.collections[mytool.input_name + " Caps"]
+        collection = data.collections[keyb.input_name + " Caps"]
         for obj in [o for o in collection.objects if o.type == 'MESH']:
             meshescaps.append( obj )
-
         #joins all obj in list by creating a copy of the scene and joining them there (copy is only temporary)
         ctx = bpy.context.copy()
         ctx['active_object'] = meshescaps[0]
         ctx['selected_editable_objects'] = meshescaps
         bpy.ops.object.join(ctx)
-
+        
         #sets obj as the first obj in the caps collection and the name 
-        obj = data.collections[mytool.input_name + " Caps"].objects[0]
-        obj.name = mytool.input_name + " Caps"
+        obj = data.collections[keyb.input_name + " Caps"].objects[0]
+        obj.name = keyb.input_name + " Caps"
 
         #removes all orphan meshes
         for mesh in [m for m in addedKEYCAPS if m.users == 0]:
@@ -434,97 +249,124 @@ def addKeyboard(file):
 
         #set obj origin to center of geometry
         obj.data.transform(Matrix.Translation(-origin))
-
-        #sets keyboard position to cursor
-        #if mytool.parentobj == "Caps":
-        #    obj.location = bpy.context.scene.cursor.location
-        
-        if mytool.parentbool == False and legendspg.boolean == False:
+      
+        if keyb.parenttocap == False and keyb.parenttoswitch == False and keyb.parenttoplate == False and keyb.parenttocase == False:
             obj.scale = scale
-   
-    if legendspg.boolean == True and legendspg.typeselector == "objleg":
-        
-        collection =  data.collections[mytool.input_name + " Legends"] 
+            obj.rotation_euler = (keyb.input_rotation, 0, 0)
+
+    #Shrinkwrap legends        
+    if keyb.booleanlegends == True and keyb.legendtype == "objleg":
+        collection =  data.collections[keyb.input_name + " Legends"] 
         for subobj in [o for o in collection.objects if o.type == 'FONT' or o.type == 'MESH']:
             subobj.location -= Vector(origin)
-            if keycapspg.boolean == True:
+            if keyb.booleancap == True:
                 subobj.parent = obj
                 subobj.modifiers["Shrinkwrap"].target = obj
-        if mytool.parentbool == False and keycapspg.boolean == True:
-            obj.scale = scale
     
-    if switchespg.boolean == True:
+    #switches join 
+    if keyb.booleanswitch == True:
         #adds all switches to list 
         meshesswitch = []
-        collection = data.collections[mytool.input_name + " Switches"]
+        dataswitch = []
+        collection = data.collections[keyb.input_name + " Switches"]
         for swobj in [o for o in collection.objects if o.type == 'MESH']:
             meshesswitch.append( swobj )
-        
+            dataswitch.append(swobj.data)
         #joins all switches in list by creating a copy of the scene and joining them there (copy is only temporary)
         ctx = bpy.context.copy()
         ctx['active_object'] = meshesswitch[0]
         ctx['selected_editable_objects'] = meshesswitch
         bpy.ops.object.join(ctx)
         
-        swobj = data.collections[mytool.input_name + " Switches"].objects[0]
-        swobj.name = mytool.input_name + " Switches"
-        
-        for mesh in [m for m in addedSWITCHES if m.users == 0]:
+        swobj = data.collections[keyb.input_name + " Switches"].objects[0]
+        swobj.name = keyb.input_name + " Switches"
+        for mesh in [m for m in dataswitch if m.users == 0]:
             data.meshes.remove( mesh )
             
         origin[0] -= 0.009
         origin[2] -= 0.005
         swobj.data.transform(Matrix.Translation(-origin))
         swobj.location = (0,0,0)
-        #if mytool.parentobj == "Switches":
-        #    swobj.location = bpy.context.scene.cursor.location
-        origin = Vector((platewidth * 0.5 * 0.019 - 0.0005, -plateheight * 0.5 * 0.019, 0))
+        origin = Vector((platewidth * 0.5 * 0.019 - 0.0005, -(plateheight - 1) * 0.5 * 0.019, 0))
         
-        if mytool.parentbool == False:
+        if keyb.parenttocap == False and keyb.parenttoswitch == False and keyb.parenttoplate == False and keyb.parenttocase == False:
             swobj.scale = scale
-        
-    if mytool.parentbool == True:
-        mainobj = bpy.data.objects[mytool.input_name + " " + mytool.parentobj]
+            swobj.rotation_euler = (keyb.input_rotation, 0, 0)
     
-    if switchespg.boolean == True and mytool.parentbool == True and mytool.parentobj != "Switches":
-        swobj.parent = mainobj
-    
-    if keycapspg.boolean == True and mytool.parentbool == True and mytool.parentobj != "Caps":
-        obj.parent = mainobj
-    
-    
-    if pcbplatepg.platebool == True:
-        plateobj = bpy.data.objects[mytool.input_name + " Plate"]
-        plateobj.data.transform(Matrix.Translation(-origin))
-        if mytool.parentbool == True and mytool.parentobj != "Plate": 
-            plateobj.parent = mainobj
-        bpy.data.node_groups[mytool.input_name + "_Plate_Nodes"].nodes["Transform"].inputs["Translation"].default_value = (0,0.0095,-0.0061)
-        if mytool.parentbool == False:
-            plateobj.scale = scale
-        
-    if mytool.parentbool == True:
-        mainobj.scale = scale
-        mainobj.rotation_euler = (mytool.input_rotation, 0, 0)
-        mainobj.location = bpy.context.scene.cursor.location
+    #----------------------------PARENTING-------------------------------------
+    if keyb.booleancap == True or keyb.booleanswitch == True or keyb.booleanplate == True or keyb.booleancase == True:
+        if keyb.parenttocap == True:
+            mainobj = bpy.data.objects[keyb.input_name + " Caps"]
+            if keyb.booleanswitch == True:
+                swobj.parent = mainobj
+            if keyb.booleanplate == True:
+                plateobj = bpy.data.objects[keyb.input_name + " Plate"]
+                plateobj.parent = mainobj
+                #bpy.data.node_groups[keyb.input_name + "_Plate_Nodes"].nodes["Transform"].inputs["Translation"].default_value = (0,0.0095,-0.0061)
+            if keyb.booleancase == True:
+                caseobj = bpy.data.objects[keyb.input_name + " Case"]
+                caseobj.parent = mainobj
+            mainobj.scale = scale
+            mainobj.rotation_euler = (keyb.input_rotation, 0, 0)
+            mainobj.location = bpy.context.scene.cursor.location
+            
+        elif keyb.parenttoswitch == True:  
+            mainobj = bpy.data.objects[keyb.input_name + " Switches"]
+            if keyb.booleancap == True:
+                obj.parent = mainobj
+            if keyb.booleanplate == True:
+                plateobj = bpy.data.objects[keyb.input_name + " Plate"]
+                plateobj.parent = mainobj
+                #bpy.data.node_groups[keyb.input_name + "_Plate_Nodes"].nodes["Transform"].inputs["Translation"].default_value = (0,0.0095,-0.0061)
+            if keyb.booleancase == True:
+                caseobj = bpy.data.objects[keyb.input_name + " Case"]
+                caseobj.parent = mainobj 
+            mainobj.scale = scale
+            mainobj.rotation_euler = (keyb.input_rotation, 0, 0)
+            mainobj.location = bpy.context.scene.cursor.location
+            
+        elif keyb.parenttoplate == True:
+            mainobj = bpy.data.objects[keyb.input_name + " Plate"]
+            if keyb.booleanswitch == True:
+                swobj.parent = mainobj
+            if keyb.booleancap == True:
+                obj.parent = mainobj
+            if keyb.booleancase == True:
+                caseobj = bpy.data.objects[keyb.input_name + " Case"]
+                caseobj.parent = mainobj
+            #bpy.data.node_groups[keyb.input_name + "_Plate_Nodes"].nodes["Transform"].inputs["Translation"].default_value = (0,0.0095,-0.0061)
+            mainobj.scale = scale
+            mainobj.rotation_euler = (keyb.input_rotation, 0, 0)
+            mainobj.location = bpy.context.scene.cursor.location
+            
+        elif keyb.parenttocase == True:
+            mainobj = bpy.data.objects[keyb.input_name + " Case"]
+            if keyb.booleanswitch == True:
+                swobj.parent = mainobj
+            if keyb.booleanplate == True:
+                plateobj = bpy.data.objects[keyb.input_name + " Plate"]
+                plateobj.parent = mainobj
+                #bpy.data.node_groups[keyb.input_name + "_Plate_Nodes"].nodes["Transform"].inputs["Translation"].default_value = (0,0.0095,-0.0061)
+            if keyb.booleancap == True:
+                obj.parent = mainobj
+            mainobj.scale = scale
+            mainobj.rotation_euler = (keyb.input_rotation, 0, 0)
+            mainobj.location = bpy.context.scene.cursor.location
 
 def genUV():
     scene = bpy.context.scene
     data = bpy.data
     datao = data.objects
     datam = data.materials
-    
-    legendspg = scene.legends_pg
-    switchespg = scene.switches_pg
-    keycapspg = scene.keycaps_pg
-    mytool = scene.my_tool
+    keyb = scene.keyboardpg
     
     
     
-    name = mytool.input_name + "_Cap_Material"
+    name = keyb.input_name + "_Cap_Material"
     
     legends = pictureSelector()
   
-    obj = data.collections[mytool.input_name + " Caps"].objects[0]
+    obj = data.collections[keyb.input_name + " Caps"].objects[0]
     
     #add png to node
     if legends != "":
@@ -571,8 +413,8 @@ def genUV():
 
 def inputSelector():
     scene = bpy.context.scene
-    mytool = scene.my_tool
-  
+    keyb = scene.keyboardpg
+    
     preset = {
       "ansi40" : os.path.join(os.path.dirname(__file__), "presets/ansi40.json"), 
       "ansi60" : os.path.join(os.path.dirname(__file__), "presets/ansi60.json"),
@@ -581,38 +423,58 @@ def inputSelector():
       "iso105" : os.path.join(os.path.dirname(__file__), "presets/iso105.json")
     }
     
-    if mytool.input_selector != "custom":
-        output = preset[mytool.input_selector]
+    if keyb.input_selector != "custom":
+        output = preset[keyb.input_selector]
     else:
-        output = mytool.input_jsonfile
+        output = keyb.input_jsonfile
     return output
 
-def linkkeycaps( profilerow, width, height, item, xoffset, yoffset, capcolor, width2, rotation, rotoriginx, rotoriginy):
+def linkkeycaps( key ):
     scene = bpy.context.scene
     data = bpy.data
     datao = data.objects
     datam = data.materials
     
-    mytool = scene.my_tool
-    keycapspg = scene.keycaps_pg
-    legendspg = scene.legends_pg
-    
-    name = str(xoffset) + " " + str(yoffset)
-    
-    
-    h = capcolor.replace('#', "0x")
-    
-    
-    obj_name = str(keycapspg.profileselector) + "_" + str(profilerow) + "_" + str(width) + "," + str(height)
+    keyb = scene.keyboardpg
+        
+    if keyb.capprofile == "cherry":
+        obj_name = str(keyb.capprofile) + "_" + str(key.p) + "_high" 
+    else: 
+        obj_name = str(keyb.capprofile) + "_" + str(key.p) + "_" + str(key.w) + "," + str(key.h)
     obj_name = ''.join(obj_name.split())
 
-    if width2 == 1.5:
-        obj_name = "cherry_IsoEnter"
-        xoffset -= 0.25
-    elif width2 == 2.25:
+    if key.w2 == 1.5:
+        obj_name = "cherry_IsoEnter_high"
+        key.x -= 0.25
+    elif key.w2 == 2.25:
         obj_name = "cherry_BigEnter"
-    elif width2 == 1.75:
+    elif key.w2 == 1.75:
         obj_name = "cherry_steppedCaps"
+
+    #add materials if not already present
+    if keyb.capcolorpreset == "preset":
+        colorname = key.c
+        color = hex_to_rgb(int(key.c.replace("#","0x"), 16))
+    elif keyb.capcolorpreset == "custom":
+        colorname = srgb_to_hex(linsrgb_to_srgb(keyb.capcolor))
+        color = keyb.capcolor
+    else: 
+        colorname = keyb.capcolorpreset 
+        color = hex_to_rgb(int(keyb.capcolorpreset.replace("#","0x"), 16))
+
+    if not datam.get(keyb.input_name + "_Cap_Material" + colorname):
+        plastic = addMaterial(keyb.input_name + "_Cap_Material" + colorname , color , 0.25 , 0 , 0 , 0 , 0)
+        bump = plastic.node_tree.nodes.new("ShaderNodeBump")
+        bump.inputs[1].default_value = 0.0001 * keyb.input_scale
+        bump.inputs[0].default_value = 0.5
+        noise = plastic.node_tree.nodes.new("ShaderNodeTexNoise")
+        noise.inputs["Scale"].default_value = 10000
+        coord = plastic.node_tree.nodes.new("ShaderNodeTexCoord")
+        plastic.node_tree.links.new(bump.outputs[0], plastic.node_tree.nodes["Principled BSDF"].inputs["Normal"])
+        plastic.node_tree.links.new(noise.outputs["Fac"], bump.inputs["Height"])
+        plastic.node_tree.links.new(coord.outputs["Object"], noise.inputs["Vector"])
+    else:
+        plastic = datam[keyb.input_name + "_Cap_Material" + colorname]
 
     filepath = os.path.join(os.path.dirname(__file__), "caps.blend")
     if not bpy.context.scene.objects.get(obj_name):
@@ -621,181 +483,207 @@ def linkkeycaps( profilerow, width, height, item, xoffset, yoffset, capcolor, wi
 
         for obj in data_to.objects:
             if obj is not None:
-                data.collections[mytool.input_name + " Caps"].objects.link(obj)
+                data.collections[keyb.input_name + " Caps"].objects.link(obj)
                 
-                obj.name = name 
-    
-                if rotation == 0:
-                    obj.location.y = yoffset * 0.019
-                    obj.location.x = xoffset * -0.019
-                    obj.location = bpy.context.scene.cursor.location
-                    origin = ((xoffset * 0.019),-(yoffset * 0.019), 0)
-                    obj.data.transform(Matrix.Translation(origin))
-                else:
-                    obj.location.y = 0
-                    obj.location.x = xoffset * 0.019
-                    x = obj.location[0]
-                    y = obj.location[1]
-                    rotoriginx = rotoriginx * 0.019
-                    rotoriginy = rotoriginy * -0.019
-                    rotation = -rotation
-                    print("loc", x,y)
-                    print("rot origin", rotoriginx,rotoriginy)
-                    x1 =  (x-rotoriginx) * cos(radians(rotation)) - (y - rotoriginy) * sin(radians(rotation)) + rotoriginx #compute x 
-                    y1 =  (x-rotoriginx) * sin(radians(rotation)) + (y - rotoriginy) * cos(radians(rotation)) + rotoriginy #compute y
-                    print("locnew",x1,y1)
-                    obj.rotation_euler[2] = radians(rotation) #local rotate
-                    obj.location[0] = x1 #set global pos x
-                    obj.location[1] = y1 #set global pos y
-                    
-    
-    #loads materials if not already present
-    filepath = os.path.join(os.path.dirname(__file__), "caps.blend")
-    if not datam.get("Plastic") and not datam.get(mytool.input_name + "_Cap_Material" + capcolor):
-        with data.libraries.load(filepath, link=False) as (data_from, data_to):
-            data_to.materials = ["Plastic"]
-    
-    if datam.get("Plastic"):
-        plastic = datam.get("Plastic") 
-        plastic.name = mytool.input_name + "_Cap_Material" + capcolor
-    else:
-        plastic = datam.get(mytool.input_name + "_Cap_Material" + capcolor)
-        
-    if keycapspg.colorpreset == "custom":
-        plastic.node_tree.nodes["Principled BSDF"].inputs['Base Color'].default_value = keycapspg.color
-    elif keycapspg.colorpreset == "preset":
-        plastic.node_tree.nodes["Principled BSDF"].inputs['Base Color'].default_value = hex_to_rgb(int(h, 16))
-    else:
-        plastic.node_tree.nodes["Principled BSDF"].inputs['Base Color'].default_value = [float(x) for x in list(keycapspg.colorpreset[1:-1].split(","))]
-    
-    #links or append loaded materials
-    obj.data.materials.append(plastic) 
+                obj.name = str(key.x) + " " + str(key.y)
+                
+                #scale keycaps key.w/key.h
+                if key.w > 1 and keyb.capprofile == "cherry" and key.w2 == 0: 
+                    for v in obj.data.vertices:
+                        if v.co[0] > 0.013:
+                            v.co[0] += (key.w - 1 ) * 0.019
+                        elif v.co[0] > 0.012:
+                            v.co[0] += (key.w - 1 ) * (0.019 / (1 + 1/3) )
+                        elif v.co[0] > 0.006:
+                            v.co[0] += (key.w - 1 ) * (0.019 / 2 )
+                        elif v.co[0] > 0.005:
+                            v.co[0] += (key.w - 1 ) * (0.019 / 4 )
+                
+                if key.h > 1 and keyb.capprofile == "cherry" and key.w2 == 0: 
+                        for v in obj.data.vertices:
+                            if v.co[1] < -0.003:
+                                v.co[1] -= (key.h - 1 ) * 0.019
+                            elif v.co[1] < 0.003:
+                                v.co[1] -= (key.h - 1 ) * (0.019 / 2 )
+                
+                obj.location = bpy.context.scene.cursor.location
+                loc = ((key.x * 0.019),-(key.y * 0.019), 0)
+                obj.data.transform(Matrix.Translation(loc))
+                
+                if key.r != 0:
+                    #set origin to rotorigin
+                    obj.location[0] =  key.rx * 0.019
+                    obj.location[1] = -(key.ry + 0.5) * 0.019
+                    obj.data.transform(Matrix.Rotation(-radians(key.r), 4, 'Z'))
+                    print(key.rx)
+                    print(key.rx + 0.5)
 
-def addLegend( item, width, width2, height, xoffset, yoffset, posindex, textsize, legendcolor):
+                obj.data.materials.append(plastic) 
+    
+    #double shot 
+    if keyb.booleanlegends == True:
+
+        if keyb.legendcolorpreset == "preset":
+            legendcolorname = key.lc
+            legendcolor = hex_to_rgb(int(key.lc.replace("#","0x"), 16))
+        elif keyb.legendcolorpreset == "custom":
+            legendcolorname = srgb_to_hex(linsrgb_to_srgb(keyb.legendcolor))
+            legendcolor = keyb.legendcolor
+        else: 
+            legendcolorname = keyb.legendcolorpreset 
+            legendcolor = hex_to_rgb(int(keyb.legendcolorpreset.replace("#","0x"), 16))
+
+        if not datam.get(keyb.input_name + "_Legend_Material" + str(legendcolorname)) :
+            plastic = addMaterial(keyb.input_name + "_Legend_Material" + str(legendcolorname) , legendcolor , 0.25 , 0 , 0 , 0 , 0)
+            bump = plastic.node_tree.nodes.new("ShaderNodeBump")
+            bump.inputs[1].default_value = 0.0001 * keyb.input_scale
+            bump.inputs[0].default_value = 0.5
+            noise = plastic.node_tree.nodes.new("ShaderNodeTexNoise")
+            noise.inputs["Scale"].default_value = 10000
+            coord = plastic.node_tree.nodes.new("ShaderNodeTexCoord")
+            plastic.node_tree.links.new(bump.outputs[0], plastic.node_tree.nodes["Principled BSDF"].inputs["Normal"])
+            plastic.node_tree.links.new(noise.outputs["Fac"], bump.inputs["Height"])
+            plastic.node_tree.links.new(coord.outputs["Object"], noise.inputs["Vector"])
+        else:
+            plastic = datam[keyb.input_name + "_Legend_Material" + str(legendcolorname)]
+        
+        obj.data.materials.append(plastic) 
+    
+        for p in obj.data.polygons:
+            count = 0
+            for v in p.vertices:
+                for g in obj.data.vertices[v].groups:
+                    if g.group == 2:
+                        count += 1
+            if count > 3:
+                p.material_index = 1
+            else:
+                p.material_index = 0
+    if obj is not None:
+        return obj.data
+
+def addLegend(key):
     scene = bpy.context.scene
     data = bpy.data
     datao = data.objects
     datam = data.materials
     
-    mytool = scene.my_tool
-    keycapspg = scene.keycaps_pg
-    legendspg = scene.legends_pg
+    keyb = scene.keyboardpg
     
-    h = legendcolor.replace('#', "0x")
-    
-    item = item.replace("<br>", "\n")
-    name = mytool.input_name + "_L_" + str(xoffset) + "_" + str(yoffset) + "_" +  str(posindex)
-    
-    if width2 == 1.5:
-        xoffset -= 0.25
-    
-    textsize = textsize * 0.001 
-    #if legendspg.font == "Open Cherry Regular":
-    #    textsize = textsize * 1.15
-    textsize = round(textsize,5)
-    
-    filepath = os.path.join(os.path.dirname(__file__), "caps.blend")
-    if not bpy.context.blend_data.fonts.get(legendspg.font):
-        with data.libraries.load(filepath, link=False) as (data_from, data_to):
-            data_to.fonts = [legendspg.font]
-    
-    loadedfont = data.fonts[legendspg.font]
+    added = []
+    for pos, label in enumerate(key.labels):
+        if label.text != "":
+            name = keyb.input_name + "_L_" + str(key.x) + "_" + str(key.y) + "_" + str(label.text) + "_" + str(pos)
+            filepath = os.path.join(os.path.dirname(__file__), "caps.blend")
+            if not bpy.context.blend_data.fonts.get(keyb.legendfont):
+                with data.libraries.load(filepath, link=False) as (data_from, data_to):
+                    data_to.fonts = [keyb.legendfont]
 
-    data.curves.new(type="FONT", name=name).body = item
-    curve_obj = data.curves[name]
-    
-    curve_obj.font = loadedfont
-    curve_obj.size = textsize
-    font_obj = datao.new(name=name, object_data=data.curves[name])
-    #print(font_obj.name)
-    data.collections[mytool.input_name + " Legends"].objects.link(font_obj)
+            loadedfont = data.fonts[keyb.legendfont]
 
-    
-    font_obj.location[0] += xoffset * 0.019
-    font_obj.location[1] -= yoffset * 0.019 
-    font_obj.location[2] += 0.017 
+            curve_obj = data.curves.new(type="FONT", name=name)
+            curve_obj.body = label.text
 
-    
-        
-    if keycapspg.profileselector == "cherry":
-        texttransform = (0.004,0.0067,0.0007,0.0045,1.25,1.4)
-    elif keycapspg.profileselector == "dsa":
-        texttransform = (0.004,0.0053,0,0.0035,1.1,1.4)
-    elif keycapspg.profileselector == "sa":
-        texttransform = (0.004,0.0053,0,0.0035,1.1,1.4)
-    
-    if posindex == 4:
-        curve_obj.align_y = "TOP"
-        font_obj.location[0] += texttransform[0]
-        font_obj.location[1] += texttransform[1]
-    elif posindex == 6:
-        curve_obj.align_y = "CENTER"
-        font_obj.location[0] += texttransform[0]
-        font_obj.location[1] += texttransform[2]
-    elif posindex == 2:
-        curve_obj.align_y = "BOTTOM"
-        font_obj.location[0] += texttransform[0]
-        font_obj.location[1] -= texttransform[3]
-    if textsize == 0.0045:
-        curve_obj.space_line = texttransform[5]
-    if textsize == 0.005:
-        curve_obj.space_line = texttransform[4]    
+            curve_obj.font = loadedfont
+            curve_obj.size = label.size * 0.001 
+            font_obj = datao.new(name=name, object_data=data.curves[name])
+            data.collections[keyb.input_name + " Legends"].objects.link(font_obj)
             
+            font_obj.location[0] += key.x * 0.019
+            font_obj.location[1] -= key.y * 0.019 
+            font_obj.location[2] += 0.017 
+            
+            if keyb.legendquality == True:
+                solidify = font_obj.modifiers.new("Solidify","SOLIDIFY")
+                solidify.thickness = 0.0001
+                remesh = font_obj.modifiers.new("Remesh","REMESH")
+                remesh.mode = 'SHARP'
+                remesh.octree_depth = keyb.legendresolution
+                remesh.use_remove_disconnected = False
 
-    if legendspg.quality == True:
-        solidify = font_obj.modifiers.new("Solidify","SOLIDIFY")
-        solidify.thickness = 0.0001
-        
-        remesh = font_obj.modifiers.new("Remesh","REMESH")
-        remesh.mode = 'SHARP'
-        remesh.octree_depth = legendspg.resolution
-        remesh.use_remove_disconnected = False
+            shrinkwrap = font_obj.modifiers.new("Shrinkwrap","SHRINKWRAP")
+            shrinkwrap.wrap_method = 'PROJECT'
+            shrinkwrap.use_project_z = True
+            shrinkwrap.use_project_x = False
+            shrinkwrap.use_negative_direction = True
+            shrinkwrap.use_positive_direction = False
+            shrinkwrap.offset = 0.00001 
 
-    shrinkwrap = font_obj.modifiers.new("Shrinkwrap","SHRINKWRAP")
-    shrinkwrap.wrap_method = 'PROJECT'
-    shrinkwrap.use_project_z = True
-    shrinkwrap.use_project_x = False
-    shrinkwrap.use_negative_direction = True
-    shrinkwrap.use_positive_direction = False
-    shrinkwrap.offset = 0.00001 
-    
-    
-    filepath = os.path.join(os.path.dirname(__file__), "caps.blend")
-    if not datam.get("PlasticLeg") and not datam.get(mytool.input_name + "_Legend_Material" + legendcolor) :
-        with data.libraries.load(filepath, link=False) as (data_from, data_to):
-            data_to.materials = ["PlasticLeg"]
-    
-    if datam.get("PlasticLeg"):
-        plastic = datam.get("PlasticLeg")
-        plastic.name = mytool.input_name + "_Legend_Material" + legendcolor
-    else:
-        plastic = datam.get(mytool.input_name + "_Legend_Material" + legendcolor)
-    
-    if legendspg.colorpreset == "custom":
-        plastic.node_tree.nodes["Principled BSDF"].inputs['Base Color'].default_value = legendspg.color 
-    elif legendspg.colorpreset == "preset":
-        plastic.node_tree.nodes["Principled BSDF"].inputs['Base Color'].default_value = hex_to_rgb(int(h, 16))
-    else:
-        plastic.node_tree.nodes["Principled BSDF"].inputs['Base Color'].default_value = [float(x) for x in list(legendspg.colorpreset[1:-1].split(","))]
-    
-    font_obj.data.materials.append(plastic) 
+            if keyb.capprofile == "cherry":
+                texttransform = (0.004,0.0079,0.0014,-0.0037,1.25,1.4)
+            elif keyb.capprofile == "dsa":
+                texttransform = (0.004,0.0053,0,0.0035,1.1,1.4)
+            elif keyb.capprofile == "sa":
+                texttransform = (0.004,0.0053,0,0.0035,1.1,1.4)
+            
+            if pos in {0, 1, 2}:
+                curve_obj.align_y = "TOP"
+                font_obj.location[1] += texttransform[1]
+            if pos in {3, 4, 5}:
+                curve_obj.align_y = "CENTER"
+                font_obj.location[1] += texttransform[2]
+                font_obj.location[1] -= (key.h - 1) * 0.0095  
+            if pos in {6, 7, 8}:
+                font_obj.location[1] += texttransform[3]
+                font_obj.location[1] -= (key.h - 1) * 0.019  
+            if pos in {0, 3, 6}:
+                font_obj.location[0] += 0.004
+            
+            if pos in {1, 4, 7}:
+                curve_obj.align_x = "CENTER"
+                font_obj.location[0] += 0.009 + (key.w - 1) * 0.0095
+            if pos in {2, 5, 8}:
+                curve_obj.align_x = "RIGHT"
+                font_obj.location[0] += 0.014 + (key.w - 1) * 0.019
+            
+            if key.w2 > 1:
+                font_obj.location[0] += 0.00475
 
-def linkswitch(xoffset,yoffset,width,height):
+            #material
+            if keyb.legendcolorpreset == "preset":
+                colorname = key.lc
+                color = hex_to_rgb(int(key.lc.replace("#","0x"), 16))
+            elif keyb.legendcolorpreset == "custom":
+                colorname = srgb_to_hex(linsrgb_to_srgb(keyb.legendcolor))
+                color = keyb.legendcolor
+            else: 
+                colorname = keyb.legendcolorpreset 
+                color = hex_to_rgb(int(keyb.legendcolorpreset.replace("#","0x"), 16))
+
+            if not datam.get(keyb.input_name + "_Legend_Material" + colorname):
+                plastic = addMaterial(keyb.input_name + "_Legend_Material" + colorname , color , 0.25 , 0 , 0 , 0 , 0)
+                bump = plastic.node_tree.nodes.new("ShaderNodeBump")
+                bump.inputs[1].default_value = 0.0001 * keyb.input_scale
+                bump.inputs[0].default_value = 0.5
+                noise = plastic.node_tree.nodes.new("ShaderNodeTexNoise")
+                noise.inputs["Scale"].default_value = 10000
+                coord = plastic.node_tree.nodes.new("ShaderNodeTexCoord")
+                plastic.node_tree.links.new(bump.outputs[0], plastic.node_tree.nodes["Principled BSDF"].inputs["Normal"])
+                plastic.node_tree.links.new(noise.outputs["Fac"], bump.inputs["Height"])
+                plastic.node_tree.links.new(coord.outputs["Object"], noise.inputs["Vector"])
+                
+            else:
+                plastic = datam[keyb.input_name + "_Legend_Material" + colorname]
+
+            font_obj.data.materials.append(plastic) 
+            
+            added.append(font_obj.data)
+    return added
+
+def linkswitch( key):
     scene = bpy.context.scene
     data = bpy.data
     datao = data.objects
     datam = data.materials
     
-    mytool = scene.my_tool
-    keycapspg = scene.keycaps_pg
-    switchespg = scene.switches_pg
+    keyb = scene.keyboardpg
     
-    if switchespg.subdselector == "lowpoly":
+    added = []
+
+    if keyb.switchsubd == "lowpoly":
         obj_name = "mxswitch_lowpoly"
     else:
         obj_name = "mxswitch"
-    
-    width = width * 0.0095
 
     filepath = os.path.join(os.path.dirname(__file__), "caps.blend")
 
@@ -810,13 +698,18 @@ def linkswitch(xoffset,yoffset,width,height):
         #link object to current scene
         for obj in data_to.objects:
             if obj is not None:
-                data.collections[mytool.input_name + " Switches"].objects.link(obj)
-                obj.location.y = yoffset * -0.019 + 0.0095 - 0.0095 * height
-                obj.location.x = xoffset * 0.019 + width
+                data.collections[keyb.input_name + " Switches"].objects.link(obj)
                 
-                obj.name = "S" + str(xoffset) + " " + str(yoffset)
-    
-    if not datam.get("switch_base") and not datam.get(mytool.input_name + "_Switch_Base"):
+                obj.location = bpy.context.scene.cursor.location
+                origin = ((key.x * 0.019 + (key.w * 0.0095) - 0.0095),(key.y * -0.019 + 0.0095 - 0.0095 * key.h), 0)
+                obj.data.transform(Matrix.Translation(origin))
+                
+                obj.name = "S" + str(key.x) + " " + str(key.y)
+
+                if key.w2 > 1:
+                    obj.data.transform(Matrix.Translation((0.0048,0.0008, 0)))
+
+    if not datam.get("switch_base") and not datam.get(keyb.input_name + "_Switch_Base"):
         with data.libraries.load(filepath, link=False) as (data_from, data_to):
             data_to.materials = ["switch_base"]
         with data.libraries.load(filepath, link=False) as (data_from, data_to):
@@ -830,10 +723,10 @@ def linkswitch(xoffset,yoffset,width,height):
         for mat in materials:
             mater = datam[mat]
             mat = mat[7:].capitalize()
-            mater.name = mytool.input_name + "_Switch_" + mat
-        materials = (mytool.input_name + "_Switch_Upper",mytool.input_name + "_Switch_Base",mytool.input_name + "_Switch_Stem",mytool.input_name + "_Switch_Pins")
+            mater.name = keyb.input_name + "_Switch_" + mat
+        materials = (keyb.input_name + "_Switch_Upper",keyb.input_name + "_Switch_Base",keyb.input_name + "_Switch_Stem",keyb.input_name + "_Switch_Pins")
     else:
-        materials = (mytool.input_name + "_Switch_Upper",mytool.input_name + "_Switch_Base",mytool.input_name + "_Switch_Stem",mytool.input_name + "_Switch_Pins")
+        materials = (keyb.input_name + "_Switch_Upper",keyb.input_name + "_Switch_Base",keyb.input_name + "_Switch_Stem",keyb.input_name + "_Switch_Pins")
     
     for mat in materials:
         mater = datam[mat]
@@ -841,14 +734,14 @@ def linkswitch(xoffset,yoffset,width,height):
         mater.node_tree.nodes["Principled BSDF"].inputs['Base Color'].default_value = switchcolor(mat[-5:])
         mater.node_tree.nodes["Principled BSDF"].inputs['Transmission'].default_value = switchtrans(mat[-5:])
         
-    #if switchespg.uppertrans == True and switchespg.presets == "custom":
+    #if keyb.uppertrans == True and keyb.switchpresets == "custom":
     #    obj.data.materials[0].node_tree.nodes["Principled BSDF"].inputs['Transmission'].default_value = 1
-    #if switchespg.basetrans == True and switchespg.presets == "custom":  
+    #if keyb.basetrans == True and keyb.switchpresets == "custom":  
     #    obj.data.materials[1].node_tree.nodes["Principled BSDF"].inputs['Transmission'].default_value = 1
-    #if switchespg.stemtrans == True and switchespg.presets == "custom":  
-    #    obj.data.materials[2].node_tree.nodes["Principled BSDF"].inputs['Transmission'].default_value = 1
+    #if keyb.stemtrans == True and keyb.switchpresets == "custom":  
+    #    obj.data.materials[2].node_tree.nodes["Principled BSDF"].inputs['Transmission'].default_value = 1xoffset
     
-    o = datao["S" + str(xoffset) + " " + str(yoffset)]
+    o = datao["S" + str(key.x) + " " + str(key.y)]
     for p in o.data.polygons:
         verts_vertexGroups = [ g.group for v in p.vertices for g in o.data.vertices[ v ].groups ]
         
@@ -858,18 +751,81 @@ def linkswitch(xoffset,yoffset,width,height):
         
         groupName = o.vertex_groups[ mode ].name
         groupName = groupName[7:].capitalize()
-        groupName = mytool.input_name + "_Switch_" + groupName
+        groupName = keyb.input_name + "_Switch_" + groupName
         
         ms_index = o.material_slots.find( groupName  )
         
         if ms_index != -1: # material found
             p.material_index = ms_index
-            
+    added.append( obj.data )
+
+
+    if key.w >= 2 or key.h >= 2:
+        sobj = obj
+        obj_name = "stabilizer"
+        if not bpy.context.scene.objects.get(obj_name):
+            with data.libraries.load(filepath, link=link) as (data_from, data_to):
+                data_to.objects = [obj_name]
+                
+            for obj in data_to.objects:
+                if obj is not None:
+                    data.collections[keyb.input_name + " Switches"].objects.link(obj)
+                    cursor = bpy.context.scene.cursor.location
+                    obj.location = cursor
+                    if key.w > 6:
+                        for v in obj.data.vertices:
+                            if v.co[0] < cursor[0]:
+                                v.co[0] -= 0.03785
+                            else:
+                                v.co[0] += 0.03785
+                    if key.h >= 2:
+                        obj.data.transform(Matrix.Rotation(pi/2, 4, 'Z'))
+                    else:
+                        obj.data.transform(Matrix.Rotation(pi, 4, 'Z'))
+                    origin = ((key.x * 0.019 + (key.w * 0.0095) - 0.0095),(key.y * -0.019 + 0.0095 - 0.0095 * key.h), 0)
+                    obj.data.transform(Matrix.Translation(origin))
+                    obj.name = "St" + str(key.x) + " " + str(key.y) 
+        if key.w2 > 1:
+             obj.data.transform(Matrix.Translation((0.0048,0.0008, 0)))
+
+        if not datam.get("stab_base") and not datam.get(keyb.input_name + "_Stab_BaseS"):
+            with data.libraries.load(filepath, link=False) as (data_from, data_to):
+                data_to.materials = ["stab_base"]
+            with data.libraries.load(filepath, link=False) as (data_from, data_to):
+                data_to.materials = ["stab_stem"]
+            with data.libraries.load(filepath, link=False) as (data_from, data_to):
+                data_to.materials = ["stab_metal"]
+        if datam.get("stab_base"):
+            materials = ("stab_base","stab_stem","stab_metal")
+            for mat in materials:
+                mater = datam[mat]
+                mat = mat[5:].capitalize()
+                mater.name = keyb.input_name + "_Stab_" + mat + "S"
+            materials = (keyb.input_name + "_Stab_BaseS",keyb.input_name + "_Stab_StemS",keyb.input_name + "_Stab_MetalS")
+        else:
+            materials = (keyb.input_name + "_Stab_BaseS",keyb.input_name + "_Stab_StemS",keyb.input_name + "_Stab_MetalS")
+        
+        for mat in materials:
+            mater = datam[mat]
+            obj.data.materials.append(mater)
+            mater.node_tree.nodes["Principled BSDF"].inputs['Base Color'].default_value = switchcolor(mat[-5:])
+            mater.node_tree.nodes["Principled BSDF"].inputs['Transmission'].default_value = switchtrans(mat[-5:])
  
+        for p in obj.data.polygons:
+            for v in p.vertices:
+                for g in obj.data.vertices[v].groups:
+                    if g.group == 0:
+                        p.material_index = 0
+                    if g.group == 1:
+                        p.material_index = 1
+                    if g.group == 2:
+                        p.material_index = 2
+        return sobj.data
+    return obj.data
+
 def pictureSelector():
     scene = bpy.context.scene
-    mytool = scene.my_tool
-    legendspg = scene.legends_pg
+    keyb = scene.keyboardpg
     
     preset = {
       "ansi40" : os.path.join(os.path.dirname(__file__), "presets/ansi40preset.png"), 
@@ -877,34 +833,44 @@ def pictureSelector():
       "ansi104" : ""
     }
     
-    if legendspg.file != "" :
-        output = legendspg.file
+    if keyb.legendfile != "" :
+        output = keyb.legendfile
     else:
-        output = preset[mytool.input_selector]
+        output = preset[keyb.input_selector]
         
     return output
 
 def switchcolor(part):
+    #print(part)
     scene = bpy.context.scene
     data = bpy.data
     datao = data.objects
     datam = data.materials
     
-    legendspg = scene.legends_pg
-    switchespg = scene.switches_pg
-    keycapspg = scene.keycaps_pg
-    mytool = scene.my_tool
+    keyb = scene.keyboardpg
     
-    if switchespg.presets == "custom":
+    if keyb.switchpresets == "custom":
         custom = {
-        "Upper" : switchespg.colorupper,
-        "_Base" : switchespg.colorbase,
-        "_Stem" : switchespg.colorstem,
-        "_Pins" : switchespg.colorpins
+        "Upper" : keyb.switchcolorupper,
+        "_Base" : keyb.switchcolorbase,
+        "_Stem" : keyb.switchcolorstem,
+        "_Pins" : keyb.switchcolorpins,
         }
-        output = custom[part]
-       
-    else:
+        if part == "Upper" or part == "_Base" or part == "_Stem" or part == "_Pins":
+            return custom[part]
+        
+    if keyb.stabpresets == "custom":
+        custom = {
+        "BaseS" : keyb.stabcolorbase,
+        "StemS" : keyb.stabcolorstem,
+        "etalS" : keyb.stabcolorbar,
+        }
+        if part == "Upper" or part == "_Base" or part == "_Stem" or part == "_Pins":
+            pass
+        else:
+            return custom[part]
+            
+    if keyb.switchpresets != "custom":
         presets = {
         "cherryred" : {"Upper" : (0,0,0,1),
                         "_Base" : (0,0,0,1),
@@ -925,51 +891,70 @@ def switchcolor(part):
                         "_Base" : (0.2,0.14,0.4,1),
                         "_Stem" : (0.8,0.8,0.8,1),
                         "_Pins" : (0.5,0.2,0.1,1)
-                        },
+                        },                
         }
         
-        output = presets[switchespg.presets][part]
-       
-    return output
+        if part == "Upper" or part == "_Base" or part == "_Stem" or part == "_Pins":
+            return presets[keyb.switchpresets][part]
     
+    if keyb.stabpresets != "custom":
+        presets = {
+        "bblack" : {"BaseS" : (0,0,0,1),
+                        "StemS" : (0,0,0,1),
+                        "etalS" : (0.8,0.8,0.8,1)
+                        },         
+        "btransparent" : {"BaseS" : (0.9,0.9,0.9,1),
+                        "StemS" : (0.9,0.9,0.9,1),
+                        "etalS" : (0.8,0.8,0.8,1)},    
+        "studiorx78gold" : {"BaseS" : (0.2,0.5,1,1),
+                        "StemS" : (1,0.3,0.2,1),
+                        "etalS" : (1,0.5,0.2,1)},                    
+        }
+        if part == "Upper" or part == "_Base" or part == "_Stem" or part == "_Pins":
+            pass
+        else:
+            return presets[keyb.stabpresets][part]
+
 def switchtrans(part):
     scene = bpy.context.scene
     data = bpy.data
     datao = data.objects
     datam = data.materials
+
+    keyb = scene.keyboardpg
     
-    legendspg = scene.legends_pg
-    switchespg = scene.switches_pg
-    keycapspg = scene.keycaps_pg
-    mytool = scene.my_tool
+    upper = keyb.switchtransupper
+    base = keyb.switchtransbase
+    stem = keyb.switchtransstem
+    baseS = keyb.stabtransbase
+    stemS = keyb.stabtransstem
     
-    if switchespg.presets == "custom":
-        upper = switchespg.uppertrans
-        base = switchespg.basetrans
-        stem = switchespg.stemtrans
-        
-        if upper == True:
-            upper = 1
-        else:
-            upper = 0
-        if base == True:
-            base = 1
-        else:
-            base = 0
-        if stem == True:
-            stem = 1
-        else:
-            stem = 0
+    if keyb.switchpresets == "custom":
         
         custom = {
         "Upper" : upper,
         "_Base" : base,
         "_Stem" : stem,
-        "_Pins" : 0
+        "_Pins" : 0,
+        "BaseS" : baseS,
+        "StemS" : stemS,
+        "etalS" : 0
         }
-        output = custom[part]
-        
-    else:
+        if part == "Upper" or part == "_Base" or part == "_Stem" or part == "_Pins":
+            return custom[part]
+    if keyb.stabpresets == "custom":
+        custom = {
+        "BaseS" : baseS,
+        "StemS" : stemS,
+        "etalS" : 0
+        }
+        if part == "Upper" or part == "_Base" or part == "_Stem" or part == "_Pins":
+            pass
+        else:
+            return custom[part]
+    
+    
+    if keyb.switchpresets != "custom":
         presets = {
         "cherryred" : {"Upper" : 0,
                         "_Base" : 0,
@@ -990,12 +975,27 @@ def switchtrans(part):
                         "_Base" : 0,
                         "_Stem" : 0,
                         "_Pins" : 0
-                        },
+                        },              
         }
-        
-        output = presets[switchespg.presets][part]
-        
-    return output
+        if part == "Upper" or part == "_Base" or part == "_Stem" or part == "_Pins":
+            return presets[keyb.switchpresets][part]
+            
+    if keyb.stabpresets != "custom":
+        presets = {
+        "bblack" : {"BaseS" : 0,
+                        "StemS" : 0,
+                        "etalS" : 0},         
+        "btransparent" : {"BaseS" : 1,
+                        "StemS" : 1,
+                        "etalS" : 0},    
+        "studiorx78gold" : {"BaseS" : 1,
+                        "StemS" : 1,
+                        "etalS" : 0},                    
+        }
+        if part == "Upper" or part == "_Base" or part == "_Stem" or part == "_Pins":
+            pass
+        else:
+            return presets[keyb.stabpresets][part]
 
 def srgb_to_linearrgb(c):
     if   c < 0:       return 0
@@ -1007,3 +1007,33 @@ def hex_to_rgb(h,alpha=1):
     g = (h & 0x00ff00) >> 8
     b = (h & 0x0000ff)
     return tuple([srgb_to_linearrgb(c/0xff) for c in (r,g,b)] + [alpha])
+
+def linsrgb_to_srgb(linsrgb):
+    srgb = [0,0,0,0]
+    for idx, col in enumerate(linsrgb):
+        gamma = 1.055 * col**(1./2.4) - 0.055
+        scale = col * 12.92
+        srgb[idx] = round(numpy.where(col > 0.0031308, gamma, scale)*255)
+    if len(srgb) > 3: srgb.pop(3)
+    return tuple(srgb)
+
+def srgb_to_hex(srgb):
+    return '#%02x%02x%02x' % srgb
+
+
+def addMaterial(name,color,rough,metal,trans,transrough,bevel):
+
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    mat.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = color
+    mat.node_tree.nodes['Principled BSDF'].inputs['Roughness'].default_value = rough
+    mat.node_tree.nodes['Principled BSDF'].inputs['Metallic'].default_value = metal
+    mat.node_tree.nodes['Principled BSDF'].inputs['Transmission'].default_value = trans
+    mat.node_tree.nodes['Principled BSDF'].inputs['Transmission Roughness'].default_value = transrough
+    
+    if bevel > 0:
+        bevelnode = mat.node_tree.nodes.new("ShaderNodeBevel")
+        bevelnode.samples = 5
+        bevelnode.inputs[0].default_value = bevel
+        mat.node_tree.links.new(bevelnode.outputs[0], mat.node_tree.nodes["Principled BSDF"].inputs["Normal"])
+    return mat
