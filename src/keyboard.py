@@ -626,16 +626,26 @@ def addLegend(key):
             if pos in {6, 7, 8}:
                 font_obj.location[1] += texttransform[3]
                 font_obj.location[1] -= (key.h - 1) * 0.019  
-            if pos in {0, 3, 6}:
+            if pos in {9, 10, 11}:
+                font_obj.location[1] -= 0.007 + (key.h - 1) * 0.019
+                font_obj.rotation_euler = (1.13446,0,0) 
+                if key.p == "R1": font_obj.location[2] -= 0.01
+                if key.p == "R2": font_obj.location[2] -= 0.012
+                if key.p == "R3": font_obj.location[2] -= 0.0127
+                if key.p == "R4" or key.p == "space": font_obj.location[2] -= 0.0112
+
+            if pos in {0, 3, 6, 9}:
                 font_obj.location[0] += 0.004
-            
-            if pos in {1, 4, 7}:
+            if pos in {1, 4, 7, 10}:
                 curve_obj.align_x = "CENTER"
                 font_obj.location[0] += 0.009 + (key.w - 1) * 0.0095
-            if pos in {2, 5, 8}:
+            if pos in {2, 5, 8, 11}:
                 curve_obj.align_x = "RIGHT"
                 font_obj.location[0] += 0.014 + (key.w - 1) * 0.019
             
+
+
+
             if key.w2 > 1:
                 font_obj.location[0] += 0.00475
 
